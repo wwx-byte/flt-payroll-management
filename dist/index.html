@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="薪资台账、工资条发放与手写签收工作台演示">
+<title>薪酬工作台</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="xlsx.js"></script>
+<script defer src="import.js"></script>
+<script defer src="app.js"></script>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="brandmark" aria-hidden="true">▥</span><div>薪酬工作台<small>PAYROLL WORKSPACE</small></div></div>
+  <nav aria-label="主导航" id="nav"></nav>
+  <div class="profile"><span class="avatar">HR</span><div><strong>人事管理员</strong><small>演示工作空间</small></div></div>
+</aside>
+<main>
+  <header class="top"><div>人力资源 <span> / </span> <strong id="crumb"></strong></div><span class="demo"><i></i> 原型演示</span></header>
+  <div class="content" id="app"></div>
+</main>
+<div id="notice" role="status" aria-live="polite"></div>
+<dialog id="modal" aria-labelledby="modal-title"></dialog>
+</body>
+</html>
