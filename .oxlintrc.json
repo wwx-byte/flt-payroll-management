@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react"],
+  "categories": {
+    "correctness": "warn"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "build/**",
+    ".output/**",
+    ".nitro/**",
+    ".tanstack/**",
+    ".venv/**",
+    "payroll-data/**",
+    "src/route-tree.gen.ts"
+  ]
+}

@@ -12,11 +12,13 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import sys
 
 import msoffcrypto
 import openpyxl
 
-from server import DATA, db, read_state, store, validate_state
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from storage import DATA, db, read_state, store, validate_state
 
 DEFERRED = {610, 612, 614, 617}
 MATCH_BY_NAME = {345, 608, 615, 616, 618, 619}

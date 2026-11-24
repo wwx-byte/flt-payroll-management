@@ -1,159 +1,26 @@
 """Authenticated payroll workplace."""
 import argparse
-import hashlib
 import hmac
 import json
-import os
-import re
 import secrets
 import sqlite3
 import time
 from contextlib import closing
-from datetime import datetime, timezone
 from http.cookies import SimpleCookie, CookieError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, urlsplit
 
+from storage import db, initialize, pack, password_hash, read_state, store, unique_items, validate_state
+
 ROOT = Path(__file__).resolve().parent
-DATA = ROOT.parent / "payroll-data"
 USERNAME = "admin"
 MAX_BODY = 40 * 1024 * 1024
 SESSION_AGE = 8 * 60 * 60
 ASSETS = {"/style.css": "text/css", "/app.js": "application/javascript",
           "/import.js": "application/javascript", "/xlsx.js": "application/javascript"}
-MONTH = re.compile(r"20\d{2}-(?:0[1-9]|1[0-2])")
 CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-
-
-def db():
-    return sqlite3.connect(DATA / "payroll.sqlite3", timeout=10, isolation_level=None)
-
-
-def pack(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-
-
-def password_hash(password, salt):
-    return hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
-
-
-def initialize():
-    os.umask(0o077)
-    DATA.mkdir(mode=0o700, exist_ok=True)
-    DATA.chmod(0o700)
-    with closing(db()) as con:
-        con.execute("CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), rev INTEGER NOT NULL, value TEXT NOT NULL)")
-        con.execute("CREATE TABLE IF NOT EXISTS account (id INTEGER PRIMARY KEY CHECK(id=1), salt BLOB NOT NULL, digest BLOB NOT NULL)")
-        con.execute("INSERT OR IGNORE INTO state VALUES (1, 0, ?)", (pack({"employees": [], "batches": []}),))
-        if not con.execute("SELECT id FROM account").fetchone():
-            passfile = DATA / "initial-login.txt"
-            if passfile.exists():
-                password = passfile.read_text().splitlines()[-1]
-            else:
-                password = secrets.token_urlsafe(24)
-                with passfile.open("x") as out:
-                    out.write("admin\n" + password + "\n")
-            salt = secrets.token_bytes(16)
-            con.execute("INSERT INTO account VALUES (1, ?, ?)", (salt, password_hash(password, salt)))
-
-
-def read_state(con):
-    rev, raw = con.execute("SELECT rev, value FROM state WHERE id=1").fetchone()
-    return rev, json.loads(raw)
-
-
-def store(con, rev, state):
-    con.execute("UPDATE state SET rev=?, value=? WHERE id=1", (rev+1, pack(state)))
-
-
-def unique_items(items, key):
-    values = {item[key]: item for item in items}
-    if len(values) != len(items):
-        raise ValueError("数据存在重复记录。")
-    return values
-
-
-def validate_state(state):
-    employees = unique_items(state["employees"], "id")
-    batches = unique_items(state["batches"], "month")
-    for employee in employees.values():
-        if any(not isinstance(employee[key], str) or not employee[key].strip() for key in ("id", "name", "dept")):
-            raise ValueError("员工档案缺少有效工号、姓名或部门。")
-        for record in employee["history"]:
-            source = record.get("source")
-            amount = record["amount"]
-            date = record["date"]
-            if record["type"] not in ("试用期", "转正", "调薪", "初始标准"):
-                raise ValueError("薪资档案含无效类型或金额。")
-            if not (source and amount is None) and (type(amount) is not int or not 0 <= amount <= 2**53-1):
-                raise ValueError("薪资档案含无效金额。")
-            if not (source and date is None):
-                datetime.strptime(date, "%Y-%m" if source and MONTH.fullmatch(date) else "%Y-%m-%d")
-            if source:
-                if not isinstance(source["file"], str) or type(source["row"]) is not int or source["row"] < 3:
-                    raise ValueError("薪资档案的来源无效。")
-                validate_details(record["details"])
-    for month, batch in batches.items():
-        if not MONTH.fullmatch(month) or not batch["versions"]:
-            raise ValueError("工资条月份或版本无效。")
-        for number, version in enumerate(batch["versions"], start=1):
-            if version["number"] != number or not version["slips"]:
-                raise ValueError("工资条版本无效。")
-            for slip in unique_items(version["slips"], "id").values():
-                if slip["id"] not in employees or slip["name"] != employees[slip["id"]]["name"]:
-                    raise ValueError("工资条工号与员工档案不一致。")
-                values = [slip[key] for key in ("gross", "withheld", "net")]
-                if any(type(value) is not int or abs(value) > 2**53-1 for value in values) or abs(values[0]-values[1]-values[2]) > 1:
-                    raise ValueError("工资条金额无法核对。")
-                if slip["status"] not in ("draft", "historical"):
-                    raise ValueError("当前版本仅支持历史导入与待发放状态。")
-                validate_details(slip["details"])
-
-
-def validate_details(details):
-    if not isinstance(details, list) or any(not isinstance(pair, list) or len(pair) != 2 or
-            not isinstance(pair[0], str) or not isinstance(pair[1], (str, int, float, type(None))) for pair in details):
-        raise ValueError("薪资分项格式无效。")
-
-
-def sync(batches):
-    with closing(db()) as con:
-        con.execute("BEGIN IMMEDIATE")
-        rev, state = read_state(con)
-        existing = unique_items(state["batches"], "month")
-        employees = unique_items(state["employees"], "id")
-        stats = []
-        for batch in batches:
-            month = batch["month"]
-            if month in existing:
-                latest = existing[month]["versions"][-1]
-                if latest.get("checksum") == batch["checksum"]:
-                    continue
-                raise ValueError(month + " 已有不同版本，请通过界面复核后导入。")
-            for row in batch["slips"]:
-                employee = employees.get(row["id"])
-                if employee is None:
-                    employee = {key: row[key] for key in ("id", "name", "dept")}
-                    employee["history"] = []
-                    state["employees"].append(employee)
-                    employees[row["id"]] = employee
-                elif employee["name"] != row["name"]:
-                    raise ValueError(month + " 存在同一工号对应不同姓名，需要先核对。")
-                employee["dept"] = row["dept"]
-            new = {"month": month, "versions": [{
-                "number": 1, "source": batch["source"], "checksum": batch["checksum"],
-                "createdAt": datetime.now(timezone.utc).isoformat(), "slips": batch["slips"]
-            }]}
-            state["batches"].append(new)
-            existing[month] = new
-            stats.append((month, len(batch["slips"]), sum("sourceEmployeeId" in row for row in batch["slips"])))
-        if stats:
-            validate_state(state)
-            store(con, rev, state)
-        con.commit()
-        print(pack({"imported": stats, "employees": len(employees)}))
 
 
 LOGIN = """<!doctype html><html lang="zh-CN"><meta charset="utf-8">
@@ -308,24 +175,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    import sys
     parser = argparse.ArgumentParser()
     parser.add_argument("--bind", default="127.0.0.1", help="Address to listen on")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--origin", help="Browser-facing URL origin, including any non-default port")
-    parser.add_argument("--sync", action="store_true")
     args = parser.parse_args()
     initialize()
-    if args.sync:
-        sync(json.load(sys.stdin))
-    else:
-        origin = args.origin or f"http://{args.bind}:{args.port}"
-        parsed = urlsplit(origin)
-        if (parsed.scheme not in ("http", "https") or not parsed.hostname or
-                parsed.username is not None or origin != f"{parsed.scheme}://{parsed.netloc}"):
-            parser.error("--origin must be an HTTP or HTTPS origin such as https://payroll.example.com")
-        Handler.origin = origin
-        Handler.public_host = parsed.netloc
-        if parsed.scheme == "https":
-            Handler.cookie_attributes += "; Secure"
-        ThreadingHTTPServer((args.bind, args.port), Handler).serve_forever()
+    origin = args.origin or f"http://{args.bind}:{args.port}"
+    parsed = urlsplit(origin)
+    if (parsed.scheme not in ("http", "https") or not parsed.hostname or
+            parsed.username is not None or origin != f"{parsed.scheme}://{parsed.netloc}"):
+        parser.error("--origin must be an HTTP or HTTPS origin such as https://payroll.example.com")
+    Handler.origin = origin
+    Handler.public_host = parsed.netloc
+    if parsed.scheme == "https":
+        Handler.cookie_attributes += "; Secure"
+    ThreadingHTTPServer((args.bind, args.port), Handler).serve_forever()

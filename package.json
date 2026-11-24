@@ -1,0 +1,48 @@
+{
+  "name": "flt-payroll-management",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26.13.0 <27",
+    "pnpm": ">=12 <13"
+  },
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port 8765 --strictPort",
+    "build": "vite build",
+    "start": "node scripts/start.mjs",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck",
+    "test": "node --test tests/*.test.mjs",
+    "lint": "oxlint --deny-warnings && node scripts/check-file-names.mjs",
+    "format": "oxfmt --write",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@orpc/client": "^1.16.5",
+    "@orpc/contract": "^1.16.5",
+    "@orpc/openapi": "^1.16.5",
+    "@orpc/openapi-client": "^1.16.5",
+    "@orpc/server": "^1.16.5",
+    "@stylexjs/stylex": "^0.19.2",
+    "@tanstack/react-query": "^5.108.3",
+    "@tanstack/react-router": "^1.170.46",
+    "@tanstack/react-start": "^1.169.7",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@stylexjs/unplugin": "^0.19.2",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "nitro": "3.0.261103-rc",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "packageManager": "pnpm@12.16.1"
+}

@@ -1,0 +1,8 @@
+[project]
+name = "flt-payroll-management"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+salary-import = ["msoffcrypto-tool>=5.4", "openpyxl>=3.1"]

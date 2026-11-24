@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "singleQuote": true,
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "dist/**",
+    "build/**",
+    ".output/**",
+    ".nitro/**",
+    ".tanstack/**",
+    ".venv/**",
+    "payroll-data/**",
+    "src/route-tree.gen.ts",
+    ".openai/**",
+    "pnpm-lock.yaml",
+    "uv.lock"
+  ]
+}

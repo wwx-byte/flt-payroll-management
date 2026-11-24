@@ -1,2 +1,10 @@
 __pycache__/
 .DS_Store
+/.venv/
+/payroll-data/
+/node_modules/
+/.output/
+/.tanstack/
+/.nitro/
+/build/
+/test-results/
