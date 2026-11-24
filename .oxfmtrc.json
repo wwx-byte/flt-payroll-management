@@ -11,6 +11,7 @@
     ".nitro/**",
     ".tanstack/**",
     ".venv/**",
+    "data/**",
     "payroll-data/**",
     "src/route-tree.gen.ts",
     ".openai/**",

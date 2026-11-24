@@ -32,7 +32,7 @@ export async function fixture(t) {
   ])
     await copyFile(name, join(root, name))
   await symlink(resolve('dist'), join(root, 'dist'))
-  const data = join(root, 'payroll-data')
+  const data = join(root, 'data')
   const python = execFileSync('uv', ['python', 'find', '3.12'], {
     encoding: 'utf8',
   }).trim()
@@ -74,7 +74,6 @@ export async function fixture(t) {
             ...process.env,
             HOST: '127.0.0.1',
             PORT: String(port),
-            PAYROLL_ORIGIN: origin,
             PAYROLL_DATA_DIR: data,
           },
           stdio: ['ignore', 'ignore', 'inherit'],

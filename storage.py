@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "payroll-data"
+DATA = ROOT / "data"
 MONTH = re.compile(r"20\d{2}-(?:0[1-9]|1[0-2])")
 
 
@@ -27,9 +27,10 @@ def password_hash(password, salt):
 
 
 def initialize():
-    legacy = ROOT.parent / "payroll-data"
-    if not (DATA / "payroll.sqlite3").exists() and (legacy / "payroll.sqlite3").is_file():
-        raise SystemExit(f"发现旧版薪资数据库。请停止旧服务并备份，将 {legacy} 中的台账和配套文件迁移到 {DATA} 后重启。")
+    if not (DATA / "payroll.sqlite3").exists():
+        for legacy in (ROOT / "payroll-data", ROOT.parent / "payroll-data"):
+            if (legacy / "payroll.sqlite3").is_file():
+                raise SystemExit(f"发现旧版薪资数据库。请停止旧服务并备份，将 {legacy} 中的台账和配套文件迁移到 {DATA} 后重启。")
     os.umask(0o077)
     DATA.mkdir(mode=0o700, exist_ok=True)
     DATA.chmod(0o700)

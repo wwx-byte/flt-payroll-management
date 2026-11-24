@@ -20,14 +20,15 @@ export function passwordHash(password: string, salt: Uint8Array) {
 let connection: DatabaseSync | undefined
 export function database() {
   if (connection) return connection
-  const directory = resolve(process.env.PAYROLL_DATA_DIR || 'payroll-data')
+  const directory = resolve(process.env.PAYROLL_DATA_DIR || 'data')
   const file = join(directory, 'payroll.sqlite3')
   if (
     !process.env.PAYROLL_DATA_DIR &&
     !existsSync(file) &&
-    existsSync(resolve('../payroll-data/payroll.sqlite3'))
+    (existsSync(resolve('payroll-data/payroll.sqlite3')) ||
+      existsSync(resolve('../payroll-data/payroll.sqlite3')))
   ) {
-    throw new Error('发现旧版薪资数据库，请先迁移至项目内的 payroll-data。')
+    throw new Error('发现旧版薪资数据库，请先迁移至项目内的 data。')
   }
   mkdirSync(directory, { recursive: true, mode: 0o700 })
   chmodSync(directory, 0o700)

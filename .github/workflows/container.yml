@@ -1,0 +1,100 @@
+name: Verify and package payroll
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: astral-sh/setup-uv@v7
+      - name: Install dependencies
+        run: |
+          npm install --global "$(node -p 'require("./package.json").packageManager')"
+          pnpm install --frozen-lockfile
+          uv python install 3.12
+          pnpm exec playwright install --with-deps chromium
+      - name: Verify application
+        run: |
+          pnpm build
+          pnpm check
+          pnpm test
+
+  container:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      ARCH: ${{ matrix.arch }}
+      IMAGE: flt-payroll-management:${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'ci' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and smoke-test container
+        run: |
+          docker compose config --quiet
+          docker build --platform "linux/$ARCH" --tag "$IMAGE" .
+          docker run -d --name payroll -p 127.0.0.1:8765:8765 "$IMAGE"
+          trap 'docker rm -f payroll' EXIT
+          curl --fail --retry 15 --retry-connrefused http://127.0.0.1:8765/ -o /tmp/login.html
+          grep -q 'name="password"' /tmp/login.html
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/state)" = 401
+      - name: Export release image
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -o pipefail
+          mkdir assets
+          archive="assets/flt-payroll-management-${GITHUB_REF_NAME}-linux-${ARCH}.tar.gz"
+          docker save "$IMAGE" | gzip -1 > "$archive"
+          test "$(stat -c %s "$archive")" -lt 2147483648
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: image-${{ matrix.arch }}
+          path: assets/*.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 2
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, container]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          path: assets
+          merge-multiple: true
+      - name: Publish versioned images and Compose file
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp compose.yaml assets/
+          (cd assets && sha256sum *.tar.gz compose.yaml > SHA256SUMS)
+          gh release create "$GITHUB_REF_NAME" assets/* --verify-tag --generate-notes \
+            --notes "下载与目标机器架构对应的 .tar.gz，用 docker load -i 载入镜像。Compose 使用 PAYROLL_IMAGE=flt-payroll-management:${GITHUB_REF_NAME}。"

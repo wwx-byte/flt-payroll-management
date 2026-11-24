@@ -15,10 +15,7 @@ function token(request: Request) {
 export function authenticated(request: Request) {
   return (sessions.get(token(request)) || 0) > Date.now()
 }
-function redirect(cookie: string) {
-  const secure = process.env.PAYROLL_ORIGIN?.startsWith('https://')
-    ? '; Secure'
-    : ''
+function redirect(cookie: string, secure: boolean) {
   return new Response(null, {
     status: 303,
     headers: {
@@ -27,11 +24,14 @@ function redirect(cookie: string) {
         'payroll_session=' +
         cookie +
         '; Path=/; HttpOnly; SameSite=Strict' +
-        secure,
+        (secure ? '; Secure' : ''),
     },
   })
 }
-export async function login(request: Request): Promise<Response | 401 | 429> {
+export async function login(
+  request: Request,
+  secure: boolean,
+): Promise<Response | 401 | 429> {
   const now = Date.now()
   attempts = attempts.filter((t) => now - t < 60_000)
   if (attempts.length >= 8) return 429
@@ -55,9 +55,9 @@ export async function login(request: Request): Promise<Response | 401 | 429> {
   for (const [id, end] of sessions) if (end <= now) sessions.delete(id)
   const id = randomBytes(32).toString('base64url')
   sessions.set(id, now + 8 * 3600_000)
-  return redirect(id)
+  return redirect(id, secure)
 }
-export function logout(request: Request) {
+export function logout(request: Request, secure: boolean) {
   sessions.delete(token(request))
-  return redirect('; Max-Age=0')
+  return redirect('; Max-Age=0', secure)
 }

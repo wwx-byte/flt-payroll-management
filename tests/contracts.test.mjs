@@ -24,6 +24,25 @@ test('Python / Node SQLite、认证、版本和事务兼容', async (t) => {
     ).status,
     403,
   )
+  const alternate = new URL(origin)
+  alternate.hostname = 'localhost'
+  for (const scheme of ['http:', 'https:']) {
+    const browserOrigin = scheme + '//' + alternate.host
+    const response = await fetch(new URL('/login', alternate), {
+      method: 'POST',
+      redirect: 'manual',
+      headers: {
+        origin: browserOrigin,
+        'x-forwarded-proto': scheme.slice(0, -1),
+      },
+      body: new URLSearchParams({ username: 'admin', password }),
+    })
+    assert.equal(response.status, 303)
+    assert.equal(
+      response.headers.get('set-cookie').includes('; Secure'),
+      scheme === 'https:',
+    )
+  }
   const denied = await form('/login', {
     username: 'admin',
     password: 'invalid',

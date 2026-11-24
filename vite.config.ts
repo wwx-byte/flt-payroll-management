@@ -15,6 +15,7 @@ export default defineConfig({
   server: {
     fs: {
       deny: [
+        '**/data/**',
         '**/payroll-data/**',
         '**/*.sqlite3*',
         '**/initial-login.txt',

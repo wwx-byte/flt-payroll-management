@@ -9,23 +9,22 @@ import { limitedBody } from './server/body'
 import { database } from './server/store'
 
 const render = createStartHandler(defaultStreamHandler)
-const origin = new URL(
-  process.env.PAYROLL_ORIGIN ||
-    'http://127.0.0.1:' + (process.env.PORT || '8765'),
-)
 async function dispatch(request: Request, nonce: string) {
   request.headers.delete('x-payroll-login-error')
   request.headers.set('x-payroll-render-nonce', nonce)
   const url = new URL(request.url)
-  if (
-    (request.headers.get('host') || url.host) !== origin.host ||
-    (request.method === 'POST' &&
-      request.headers.get('origin') !== origin.origin)
-  ) {
+  const protocol =
+    request.headers.get('x-forwarded-proto') === 'https'
+      ? 'https:'
+      : url.protocol
+  const origin = new URL(
+    protocol + '//' + (request.headers.get('host') || url.host),
+  ).origin
+  if (request.method === 'POST' && request.headers.get('origin') !== origin) {
     return new Response('请求来源无效。', { status: 403 })
   }
   if (url.pathname === '/login' && request.method === 'POST') {
-    const result = await login(request)
+    const result = await login(request, protocol === 'https:')
     if (result instanceof Response) return result
     const retry = new URL('/login', origin)
     const page = await render(
@@ -44,7 +43,7 @@ async function dispatch(request: Request, nonce: string) {
     if (!authenticated(request))
       return new Response('请重新登录。', { status: 401 })
     if (url.pathname === '/logout' && request.method === 'POST')
-      return logout(request)
+      return logout(request, protocol === 'https:')
     let apiRequest = request
     if (request.method === 'POST') {
       if (

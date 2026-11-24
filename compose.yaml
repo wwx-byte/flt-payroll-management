@@ -1,0 +1,13 @@
+services:
+  payroll:
+    image: ${PAYROLL_IMAGE:-flt-payroll-management:local}
+    build: .
+    ports:
+      - '${PAYROLL_PORT:-8765}:8765'
+    volumes:
+      - type: bind
+        source: ./data
+        target: /app/data
+        bind:
+          create_host_path: false
+    restart: unless-stopped

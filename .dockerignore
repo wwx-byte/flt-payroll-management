@@ -1,0 +1,13 @@
+**
+!package.json
+!pnpm-lock.yaml
+!tsconfig.json
+!vite.config.ts
+!src/
+!src/**
+!dist/
+!dist/import.js
+!dist/xlsx.js
+!dist/package.json
+!scripts/
+!scripts/start.mjs
