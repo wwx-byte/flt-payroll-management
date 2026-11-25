@@ -55,7 +55,7 @@ jobs:
           docker build --platform "linux/$ARCH" --tag "$IMAGE" .
           docker run -d --name payroll -p 127.0.0.1:8765:8765 "$IMAGE"
           trap 'docker rm -f payroll' EXIT
-          curl --fail --retry 15 --retry-connrefused http://127.0.0.1:8765/ -o /tmp/login.html
+          curl --fail --retry 15 --retry-all-errors --retry-delay 1 http://127.0.0.1:8765/ -o /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/state)" = 401
       - name: Export release image
